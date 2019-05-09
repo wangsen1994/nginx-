@@ -239,11 +239,14 @@ Nginx中主要现实了5个高级容器，熟练使用这些容器可以大大�
     ```
   * 初始化
 
+  hash 初始化由 ngx_hash_init() 函数完成，其 names 参数是 ngx_hash_key_t 结构的数组，即键-值对 <key,value> 数组，nelts 表示该数组元素的个数。该函数初始化的结果就是将 names 数组保存的键-值对<key,value>，通过 hash 的方式将其存入相应的一个或多个 hash 桶(即代码中的 buckets )中。hash 桶里面存放的是 ngx_hash_elt_t 结构的指针(hash元素指针)，该指针指向一个基本连续的数据区。该数据区中存放的是经 hash 之后的键-值对<key',value'>，即 ngx_hash_elt_t 结构中的字段 <name,value>。每一个这样的数据区存放的键-值对<key',value'>可以是一个或多个
+
   ```cpp
   /* 计算ngx_hash_elt_t的内存大小，并进行对齐操作 */
   #define NGX_HASH_ELT_SIZE(name)                                               \
     (sizeof(void *) + ngx_align((name)->key.len + 2, sizeof(void *)))
-
+/* 在32位平台上，sizeof(void*)=4，(name)->key.len即是ngx_hash_elt_t结构中name数组保存的内容的长度，其中的"+2"是要加上该结构中len字段(u_short类型)的大小。*/
+/* 因此，NGX_HASH_ELT_SIZE(name)=4+ngx_align((name)->key.len + 2, 4)，该式后半部分即是(name)->key.len+2以4字节对齐的大小。*/
 
   ngx_int_t
   ngx_hash_init(ngx_hash_init_t *hinit, ngx_hash_key_t *names, ngx_uint_t nelts)
@@ -438,3 +441,24 @@ Nginx中主要现实了5个高级容器，熟练使用这些容器可以大大�
     return NGX_OK;
   }
   ```
+* 哈希查找函数
+
+  hash 查找操作由 ngx_hash_find() 函数完成，查找时由 key 直接计算所在的 bucket，该 bucket 中保存其所在 ngx_hash_elt_t 数据区的起始地址；然后根据长度判断并用 name 内容匹配，匹配成功，其 ngx_hash_elt_t 结构的 value 字段即是所求。
+
+  ```cpp
+    void * ngx_hash_find(ngx_hash_t *hash, ngx_uint_t key, u_char *name, size_t len)
+  ```
+* 支持通配符的哈希
+
+  支持通配符的哈希查找，主要以实现了精确匹配、前置匹配和后置匹配的ngx_hash_combined_t为基础，其配置顺序是先精确查找，再前置匹配，最后后置匹配。
+
+  ```cpp
+    typedef struct {
+      ngx_hash_t            hash;
+      ngx_hash_wildcard_t  *wc_head;
+      ngx_hash_wildcard_t  *wc_tail;
+    } ngx_hash_combined_t;
+```
+### ngx_rbtree_t哈希表结构
+
+Nginx实现的ngx_rbtree_t与我们常见的数据结构中的红黑树基本一致，这里就不再赘述了，不了解的话，可以看一下数据结构这本书。
